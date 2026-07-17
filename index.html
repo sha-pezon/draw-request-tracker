@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Draw Request and Holdback Tracker</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-mark"><i data-lucide="clipboard-check"></i></div>
+          <div>
+            <strong>DrawOps</strong>
+            <span>Holdback tracker</span>
+          </div>
+        </div>
+        <nav class="nav">
+          <button class="nav-item active"><i data-lucide="layout-dashboard"></i><span>Dashboard</span></button>
+          <button class="nav-item"><i data-lucide="wallet-cards"></i><span>Draws</span></button>
+          <button class="nav-item"><i data-lucide="file-check-2"></i><span>Requirements</span></button>
+          <button class="nav-item"><i data-lucide="image"></i><span>Photos</span></button>
+          <button class="nav-item"><i data-lucide="list-checks"></i><span>Follow-up</span></button>
+        </nav>
+        <div class="sidebar-panel">
+          <span class="eyebrow">Lender package</span>
+          <strong>Next submission</strong>
+          <p>Draw #4 needs two invoices, one inspection pass, and lien waiver confirmation.</p>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Construction finance</p>
+            <h1>Draw Request and Holdback Tracker</h1>
+          </div>
+          <div class="topbar-actions">
+            <button class="icon-button" title="Search"><i data-lucide="search"></i></button>
+            <button class="icon-button" id="exportData" title="Export tracker data"><i data-lucide="download"></i></button>
+            <button class="primary-button" id="newDraw"><i data-lucide="plus"></i><span>New draw</span></button>
+          </div>
+        </header>
+
+        <section class="team-strip" aria-label="Team sharing controls">
+          <div>
+            <p class="eyebrow">Team workspace</p>
+            <h2>Hosted tracker setup</h2>
+            <p>Use one shared URL for the app. Export and import tracker data when handing off updates until a shared database is connected.</p>
+          </div>
+          <div class="team-actions">
+            <button class="ghost-button" id="saveLocal"><i data-lucide="save"></i><span>Save changes</span></button>
+            <label class="ghost-button file-button">
+              <i data-lucide="upload"></i><span>Import JSON</span>
+              <input id="importData" type="file" accept="application/json" />
+            </label>
+            <button class="ghost-button" id="resetData"><i data-lucide="rotate-ccw"></i><span>Reset sample</span></button>
+          </div>
+        </section>
+
+        <section class="control-strip" aria-label="Filters">
+          <label class="search-box">
+            <i data-lucide="search"></i>
+            <input id="searchInput" type="search" placeholder="Search contractor, budget line, document, status..." />
+          </label>
+          <div class="segmented" role="group" aria-label="Draw status filter">
+            <button class="segment active" data-filter="all">All</button>
+            <button class="segment" data-filter="ready">Ready</button>
+            <button class="segment" data-filter="attention">Needs docs</button>
+            <button class="segment" data-filter="blocked">Blocked</button>
+          </div>
+        </section>
+
+        <section class="metrics" aria-label="Portfolio summary">
+          <article class="metric">
+            <span>Requested this cycle</span>
+            <strong id="requestedMetric">$0</strong>
+            <small>Across active draw requests</small>
+          </article>
+          <article class="metric">
+            <span>Ready to submit</span>
+            <strong id="readyMetric">0</strong>
+            <small>Meets lender package rules</small>
+          </article>
+          <article class="metric">
+            <span>Missing documents</span>
+            <strong id="missingMetric">0</strong>
+            <small>Invoices, photos, waivers, inspections</small>
+          </article>
+          <article class="metric">
+            <span>Remaining holdback</span>
+            <strong id="holdbackMetric">$0</strong>
+            <small>After current eligible release</small>
+          </article>
+        </section>
+
+        <section class="property-review" aria-label="Primary project draw summary">
+          <div class="review-head">
+            <div>
+              <p class="eyebrow">Imported draw approval</p>
+              <h2 id="projectTitle">3606 Springer Street · Draw #4</h2>
+            </div>
+            <span class="badge attention" id="sowBadge"><i data-lucide="file-check-2"></i>SOW date needed</span>
+          </div>
+          <div class="review-grid">
+            <article class="review-card">
+              <span>Submitted construction budget</span>
+              <strong id="submittedBudgetCard">$92,525.00</strong>
+              <small>Total renovation budget from the 3606 Springer budget summary.</small>
+            </article>
+            <article class="review-card">
+              <span>Approved amount</span>
+              <strong id="approvedAmountCard">$10,773.77</strong>
+              <small id="approvedDateCard">Approved July 8, 2026. Net wire after inspection fee: $10,523.77.</small>
+            </article>
+            <article class="review-card">
+              <span>Remaining budget</span>
+              <strong id="remainingBudgetCard">$13,319.14</strong>
+              <small>Remaining construction budget reported after prior draws/payments.</small>
+            </article>
+            <article class="review-card warning">
+              <span>Next draw request</span>
+              <strong id="nextDrawCard">Pending SOW</strong>
+              <small id="nextDrawNote">Expected date should come from the executed contractor Scope of Work.</small>
+            </article>
+          </div>
+          <form class="project-form" id="projectForm">
+            <label>
+              <span>Project / property</span>
+              <input id="projectName" type="text" />
+            </label>
+            <label>
+              <span>Submitted budget</span>
+              <input id="submittedBudget" type="number" min="0" step="0.01" />
+            </label>
+            <label>
+              <span>Approved amount</span>
+              <input id="approvedAmount" type="number" min="0" step="0.01" />
+            </label>
+            <label>
+              <span>Approved date</span>
+              <input id="approvedDate" type="date" />
+            </label>
+            <label>
+              <span>Remaining budget</span>
+              <input id="remainingBudget" type="number" min="0" step="0.01" />
+            </label>
+            <label>
+              <span>Expected next draw date</span>
+              <input id="nextDrawDate" type="date" />
+            </label>
+          </form>
+          <div class="notification-box">
+            <div>
+              <h3><i data-lucide="bell-ring"></i>Automated email notification rule</h3>
+              <p id="notificationRule">Trigger the reminder when the executed SOW produces the next draw request date. Until that date is entered, keep the reminder inactive and flag this record for SOW follow-up.</p>
+            </div>
+            <button class="primary-button" id="copyReminder"><i data-lucide="copy"></i><span>Copy email draft</span></button>
+          </div>
+        </section>
+
+        <section class="workspace">
+          <div class="draw-list-panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">AI readiness queue</p>
+                <h2>Draw requests</h2>
+              </div>
+              <button class="ghost-button" id="sortButton"><i data-lucide="arrow-down-up"></i><span>Sort</span></button>
+            </div>
+            <div id="drawList" class="draw-list"></div>
+          </div>
+
+          <div class="detail-panel" id="detailPanel">
+            <div class="empty-state">
+              <i data-lucide="mouse-pointer-click"></i>
+              <h2>Select a draw request</h2>
+              <p>Review lender requirements, budget variance, inspection state, photo coverage, and remaining holdback.</p>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="./app.js"></script>
+  </body>
+</html>
