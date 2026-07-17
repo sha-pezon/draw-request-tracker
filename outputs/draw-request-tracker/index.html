@@ -11,6 +11,25 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
+    <section class="login-overlay" id="loginOverlay" aria-label="Account sign in">
+      <form class="login-card" id="loginForm">
+        <div class="brand-mark"><i data-lucide="clipboard-check"></i></div>
+        <p class="eyebrow">Pezon Properties access</p>
+        <h1>Sign in to DrawOps</h1>
+        <p>Use a Pezon Properties email to identify your edits and activity in the tracker.</p>
+        <label>
+          <span>Name</span>
+          <input id="loginName" type="text" autocomplete="name" required />
+        </label>
+        <label>
+          <span>Work email</span>
+          <input id="loginEmail" type="email" autocomplete="email" placeholder="name@pezonproperties.com" required />
+        </label>
+        <div class="login-error" id="loginError"></div>
+        <button class="primary-button" type="submit"><i data-lucide="log-in"></i><span>Continue</span></button>
+      </form>
+    </section>
+
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
@@ -41,6 +60,7 @@
             <h1>Draw Request and Holdback Tracker</h1>
           </div>
           <div class="topbar-actions">
+            <button class="ghost-button" id="accountButton"><i data-lucide="user"></i><span id="accountName">Sign in</span></button>
             <button class="icon-button" title="Search"><i data-lucide="search"></i></button>
             <button class="icon-button" id="exportData" title="Export tracker data"><i data-lucide="download"></i></button>
             <button class="primary-button" id="newDraw"><i data-lucide="plus"></i><span>New draw</span></button>
@@ -162,6 +182,17 @@
             </div>
             <button class="primary-button" id="copyReminder"><i data-lucide="copy"></i><span>Copy email draft</span></button>
           </div>
+        </section>
+
+        <section class="activity-panel" aria-label="Team activity">
+          <div class="panel-header">
+            <div>
+              <p class="eyebrow">Team activity</p>
+              <h2>Recent edits</h2>
+            </div>
+            <span class="badge ready" id="sharedModeBadge"><i data-lucide="users"></i>Account tracked</span>
+          </div>
+          <div class="activity-list" id="activityList"></div>
         </section>
 
         <section class="workspace">

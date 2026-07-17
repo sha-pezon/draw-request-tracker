@@ -135,6 +135,7 @@ const draws = [
 ];
 
 const storageKey = "drawops-tracker-v2";
+const accountKey = "drawops-account-v1";
 const defaultProject = {
   projectName: "3606 Springer Street · Draw #4",
   submittedBudget: 92525,
@@ -148,6 +149,8 @@ const defaultProject = {
 };
 
 let project = { ...defaultProject };
+let activity = [];
+let account = null;
 
 try {
   const saved = JSON.parse(localStorage.getItem(storageKey) || "null");
@@ -155,8 +158,11 @@ try {
   if (Array.isArray(saved?.draws)) {
     draws.splice(0, draws.length, ...saved.draws);
   }
+  if (Array.isArray(saved?.activity)) activity = saved.activity;
+  account = JSON.parse(localStorage.getItem(accountKey) || "null");
 } catch {
   localStorage.removeItem(storageKey);
+  localStorage.removeItem(accountKey);
 }
 
 if (!window.lucide) {
@@ -174,6 +180,7 @@ if (!window.lucide) {
     "image": ["M4 5h16v14H4z", "m4 15 4-5 3 3 2-3 3 5", "M8 9h.01"],
     "layout-dashboard": ["M3 3h8v8H3z", "M13 3h8v5h-8z", "M13 10h8v11h-8z", "M3 13h8v8H3z"],
     "list-checks": ["M3 6l1.5 1.5L7 4", "M3 12l1.5 1.5L7 10", "M3 18l1.5 1.5L7 16", "M10 6h11", "M10 12h11", "M10 18h11"],
+    "log-in": ["M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4", "M10 17l5-5-5-5", "M15 12H3"],
     "mouse-pointer-click": ["M4 4l7 17 2-7 7-2z", "M14 4h6v6"],
     "octagon-alert": ["M8 2h8l6 6v8l-6 6H8l-6-6V8z", "M12 8v5", "M12 16h.01"],
     "plus": ["M12 5v14", "M5 12h14"],
@@ -183,6 +190,8 @@ if (!window.lucide) {
     "search-x": ["M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16Z", "m21 21-4.3-4.3", "m8 8 6 6", "m14 8-6 6"],
     "sparkles": ["M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z", "M5 4v3", "M3.5 5.5h3", "M19 17v3", "M17.5 18.5h3"],
     "upload": ["M12 16V4", "m7 9 5-5 5 5", "M5 20h14"],
+    "user": ["M20 21a8 8 0 0 0-16 0", "M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"],
+    "users": ["M16 21a6 6 0 0 0-12 0", "M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z", "M22 21a5 5 0 0 0-5-5", "M17 3a3 3 0 0 1 0 6"],
     "wallet-cards": ["M4 7h16v12H4z", "M4 10h16", "M15 15h3"],
     "x": ["M18 6 6 18", "M6 6l12 12"]
   };
@@ -256,7 +265,86 @@ function formatDate(value) {
 }
 
 function saveData() {
-  localStorage.setItem(storageKey, JSON.stringify({ project, draws }, null, 2));
+  localStorage.setItem(storageKey, JSON.stringify({ project, draws, activity }, null, 2));
+}
+
+function activeUser() {
+  return account || { name: "Unknown user", email: "unknown@pezonproperties.com" };
+}
+
+function initials(name) {
+  return (name || "User")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("");
+}
+
+function recordActivity(action, target, detail = "") {
+  const user = activeUser();
+  activity.unshift({
+    id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+    action,
+    target,
+    detail,
+    userName: user.name,
+    userEmail: user.email,
+    timestamp: new Date().toISOString()
+  });
+  activity = activity.slice(0, 50);
+  saveData();
+  renderActivity();
+}
+
+function renderAccount() {
+  const overlay = document.getElementById("loginOverlay");
+  const label = document.getElementById("accountName");
+  if (!account) {
+    overlay.classList.add("active");
+    label.textContent = "Sign in";
+    return;
+  }
+  overlay.classList.remove("active");
+  label.textContent = account.name;
+}
+
+function renderActivity() {
+  const list = document.getElementById("activityList");
+  if (!activity.length) {
+    list.innerHTML = `
+      <div class="activity-item">
+        <div class="activity-avatar">PP</div>
+        <div class="activity-main">
+          <strong>No edits recorded yet</strong>
+          <span>Activity will show who changed the tracker and when.</span>
+        </div>
+        <div class="activity-time">Now</div>
+      </div>
+    `;
+    return;
+  }
+  list.innerHTML = activity
+    .slice(0, 6)
+    .map((item) => {
+      const when = new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit"
+      }).format(new Date(item.timestamp));
+      return `
+        <div class="activity-item">
+          <div class="activity-avatar">${initials(item.userName)}</div>
+          <div class="activity-main">
+            <strong>${item.action} · ${item.target}</strong>
+            <span>${item.userName} (${item.userEmail})${item.detail ? ` · ${item.detail}` : ""}</span>
+          </div>
+          <div class="activity-time">${when}</div>
+        </div>
+      `;
+    })
+    .join("");
 }
 
 function updateProjectFromForm() {
@@ -509,6 +597,26 @@ function recommendation(draw, overBudget, eligibleRelease) {
 }
 
 function bindEvents() {
+  document.getElementById("loginForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const name = document.getElementById("loginName").value.trim();
+    const email = document.getElementById("loginEmail").value.trim().toLowerCase();
+    const error = document.getElementById("loginError");
+    if (!email.endsWith("@pezonproperties.com")) {
+      error.textContent = "Use an @pezonproperties.com email address.";
+      return;
+    }
+    account = { name, email, signedInAt: new Date().toISOString() };
+    localStorage.setItem(accountKey, JSON.stringify(account));
+    error.textContent = "";
+    renderAccount();
+    recordActivity("Signed in", "Account", email);
+  });
+  document.getElementById("accountButton").addEventListener("click", () => {
+    document.getElementById("loginOverlay").classList.add("active");
+    document.getElementById("loginName").value = account?.name || "";
+    document.getElementById("loginEmail").value = account?.email || "";
+  });
   document.getElementById("searchInput").addEventListener("input", render);
   document.getElementById("projectForm").addEventListener("input", () => {
     updateProjectFromForm();
@@ -519,12 +627,14 @@ function bindEvents() {
   document.getElementById("saveLocal").addEventListener("click", () => {
     updateProjectFromForm();
     saveData();
+    recordActivity("Saved changes", project.projectName, project.nextDrawDate ? `Next draw ${formatDate(project.nextDrawDate)}` : "SOW date still pending");
     flashButton("saveLocal", "Saved");
   });
   document.getElementById("exportData").addEventListener("click", () => {
     updateProjectFromForm();
     saveData();
-    const payload = JSON.stringify({ project, draws, exportedAt: new Date().toISOString() }, null, 2);
+    recordActivity("Exported data", "Tracker JSON");
+    const payload = JSON.stringify({ project, draws, activity, exportedAt: new Date().toISOString() }, null, 2);
     const blob = new Blob([payload], { type: "application/json" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
@@ -541,6 +651,8 @@ function bindEvents() {
       draws.splice(0, draws.length, ...payload.draws);
       activeId = draws[0]?.id || "";
     }
+    if (Array.isArray(payload.activity)) activity = payload.activity;
+    recordActivity("Imported data", file.name);
     saveData();
     render();
     event.target.value = "";
@@ -578,7 +690,7 @@ function bindEvents() {
     };
     draws.unshift(draw);
     activeId = draw.id;
-    saveData();
+    recordActivity("Created draw", draw.id, draw.contractor);
     render();
   });
   document.querySelectorAll(".segment").forEach((button) => {
@@ -621,6 +733,7 @@ function bindEvents() {
       document.execCommand("copy");
       textarea.remove();
     }
+    recordActivity("Copied reminder", project.projectName, project.nextDrawDate ? formatDate(project.nextDrawDate) : "Pending SOW date");
     flashButton("copyReminder", "Copied");
   });
 }
@@ -631,8 +744,11 @@ function render() {
     activeId = items[0].id;
   }
   renderProject();
+  renderAccount();
+  renderActivity();
   renderList();
   renderDetail();
+  lucide.createIcons();
 }
 
 function flashButton(id, label) {
