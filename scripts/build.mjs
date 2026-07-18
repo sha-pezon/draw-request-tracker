@@ -4,11 +4,25 @@ const files = {
   "/": ["index.html", "text/html; charset=utf-8"],
   "/index.html": ["index.html", "text/html; charset=utf-8"],
   "/styles.css": ["styles.css", "text/css; charset=utf-8"],
-  "/app.js": ["app.js", "application/javascript; charset=utf-8"]
+  "/app.js": ["app.js", "application/javascript; charset=utf-8"],
+  "/config.js": ["config.js", "application/javascript; charset=utf-8"]
 };
 
 await mkdir("dist/server", { recursive: true });
 await mkdir("dist/.openai", { recursive: true });
+
+await writeFile(
+  "config.js",
+  `window.DRAWOPS_CONFIG = ${JSON.stringify(
+    {
+      supabaseUrl: process.env.SUPABASE_URL || "",
+      supabaseAnonKey: process.env.SUPABASE_ANON_KEY || "",
+      companyDomain: process.env.COMPANY_DOMAIN || "pezonproperties.com"
+    },
+    null,
+    2
+  )};\n`
+);
 
 for (const [source] of Object.values(files)) {
   await copyFile(source, `dist/${source}`);

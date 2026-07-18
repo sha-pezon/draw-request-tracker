@@ -151,6 +151,15 @@ const defaultProject = {
 let project = { ...defaultProject };
 let activity = [];
 let account = null;
+let remoteReady = false;
+let remoteSaveTimer = null;
+
+const drawopsConfig = window.DRAWOPS_CONFIG || {};
+const companyDomain = (drawopsConfig.companyDomain || "pezonproperties.com").toLowerCase();
+const supabaseClient =
+  drawopsConfig.supabaseUrl && drawopsConfig.supabaseAnonKey && window.supabase
+    ? window.supabase.createClient(drawopsConfig.supabaseUrl, drawopsConfig.supabaseAnonKey)
+    : null;
 
 try {
   const saved = JSON.parse(localStorage.getItem(storageKey) || "null");
@@ -266,10 +275,15 @@ function formatDate(value) {
 
 function saveData() {
   localStorage.setItem(storageKey, JSON.stringify({ project, draws, activity }, null, 2));
+  if (remoteReady) scheduleRemoteSave();
 }
 
 function activeUser() {
   return account || { name: "Unknown user", email: "unknown@pezonproperties.com" };
+}
+
+function emailAllowed(email) {
+  return String(email || "").toLowerCase().endsWith(`@${companyDomain}`);
 }
 
 function initials(name) {
@@ -295,11 +309,32 @@ function recordActivity(action, target, detail = "") {
   activity = activity.slice(0, 50);
   saveData();
   renderActivity();
+  if (remoteReady) {
+    supabaseClient
+      .from("drawops_activity")
+      .insert({
+        action,
+        target,
+        detail,
+        user_id: account?.id,
+        user_name: user.name,
+        user_email: user.email
+      })
+      .then(({ error }) => {
+        if (error) console.warn("Activity sync failed", error.message);
+      });
+  }
 }
 
 function renderAccount() {
   const overlay = document.getElementById("loginOverlay");
   const label = document.getElementById("accountName");
+  const loginCopy = document.querySelector(".login-card p:not(.eyebrow)");
+  if (loginCopy) {
+    loginCopy.textContent = supabaseClient
+      ? `Use your @${companyDomain} email. Supabase will verify the account before loading shared data.`
+      : `Use a Pezon Properties email to identify your edits and activity in this browser.`;
+  }
   if (!account) {
     overlay.classList.add("active");
     label.textContent = "Sign in";
@@ -307,6 +342,95 @@ function renderAccount() {
   }
   overlay.classList.remove("active");
   label.textContent = account.name;
+}
+
+function scheduleRemoteSave() {
+  clearTimeout(remoteSaveTimer);
+  remoteSaveTimer = setTimeout(syncRemoteState, 500);
+}
+
+async function syncRemoteState() {
+  if (!remoteReady || !account) return;
+  const { error } = await supabaseClient.from("drawops_state").upsert({
+    id: "main",
+    project,
+    draws,
+    updated_by: account.id,
+    updated_at: new Date().toISOString()
+  });
+  if (error) console.warn("State sync failed", error.message);
+}
+
+async function loadRemoteData() {
+  if (!supabaseClient || !account) return;
+  const stateResult = await supabaseClient.from("drawops_state").select("project, draws").eq("id", "main").single();
+  if (stateResult.data) {
+    if (stateResult.data.project && Object.keys(stateResult.data.project).length) {
+      project = { ...defaultProject, ...stateResult.data.project };
+    }
+    if (Array.isArray(stateResult.data.draws) && stateResult.data.draws.length) {
+      draws.splice(0, draws.length, ...stateResult.data.draws);
+      activeId = draws[0]?.id || activeId;
+    }
+  }
+
+  const activityResult = await supabaseClient
+    .from("drawops_activity")
+    .select("id, action, target, detail, user_name, user_email, created_at")
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (Array.isArray(activityResult.data)) {
+    activity = activityResult.data.map((item) => ({
+      id: item.id,
+      action: item.action,
+      target: item.target,
+      detail: item.detail,
+      userName: item.user_name,
+      userEmail: item.user_email,
+      timestamp: item.created_at
+    }));
+  }
+  saveData();
+}
+
+async function upsertProfile(user) {
+  const fullName = user.user_metadata?.full_name || user.user_metadata?.name || account?.name || user.email;
+  account = {
+    id: user.id,
+    name: fullName,
+    email: user.email,
+    signedInAt: new Date().toISOString(),
+    verified: true
+  };
+  localStorage.setItem(accountKey, JSON.stringify(account));
+  await supabaseClient.from("drawops_profiles").upsert({
+    user_id: user.id,
+    email: user.email,
+    full_name: fullName,
+    last_seen_at: new Date().toISOString()
+  });
+}
+
+async function hydrateSupabaseSession() {
+  if (!supabaseClient) return;
+  const {
+    data: { session }
+  } = await supabaseClient.auth.getSession();
+  const user = session?.user;
+  if (!user) {
+    account = null;
+    localStorage.removeItem(accountKey);
+    return;
+  }
+  if (!emailAllowed(user.email)) {
+    await supabaseClient.auth.signOut();
+    account = null;
+    localStorage.removeItem(accountKey);
+    return;
+  }
+  await upsertProfile(user);
+  remoteReady = true;
+  await loadRemoteData();
 }
 
 function renderActivity() {
@@ -602,8 +726,23 @@ function bindEvents() {
     const name = document.getElementById("loginName").value.trim();
     const email = document.getElementById("loginEmail").value.trim().toLowerCase();
     const error = document.getElementById("loginError");
-    if (!email.endsWith("@pezonproperties.com")) {
-      error.textContent = "Use an @pezonproperties.com email address.";
+    if (!emailAllowed(email)) {
+      error.textContent = `Use an @${companyDomain} email address.`;
+      return;
+    }
+    if (supabaseClient) {
+      error.textContent = "Sending secure sign-in link...";
+      supabaseClient.auth
+        .signInWithOtp({
+          email,
+          options: {
+            emailRedirectTo: window.location.origin + window.location.pathname,
+            data: { full_name: name }
+          }
+        })
+        .then(({ error: signInError }) => {
+          error.textContent = signInError ? signInError.message : "Check your email for the sign-in link.";
+        });
       return;
     }
     account = { name, email, signedInAt: new Date().toISOString() };
@@ -616,6 +755,23 @@ function bindEvents() {
     document.getElementById("loginOverlay").classList.add("active");
     document.getElementById("loginName").value = account?.name || "";
     document.getElementById("loginEmail").value = account?.email || "";
+  });
+  document.getElementById("googleLogin").addEventListener("click", async () => {
+    const error = document.getElementById("loginError");
+    if (!supabaseClient) {
+      error.textContent = "Google login is available after Supabase keys are configured.";
+      return;
+    }
+    const { error: signInError } = await supabaseClient.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: window.location.origin + window.location.pathname,
+        queryParams: {
+          hd: companyDomain
+        }
+      }
+    });
+    if (signInError) error.textContent = signInError.message;
   });
   document.getElementById("searchInput").addEventListener("input", render);
   document.getElementById("projectForm").addEventListener("input", () => {
@@ -761,5 +917,26 @@ function flashButton(id, label) {
   }, 1600);
 }
 
-bindEvents();
-render();
+async function boot() {
+  bindEvents();
+  await hydrateSupabaseSession();
+  render();
+  if (supabaseClient) {
+    supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+      if (!session?.user) return;
+      if (!emailAllowed(session.user.email)) {
+        await supabaseClient.auth.signOut();
+        account = null;
+        localStorage.removeItem(accountKey);
+        render();
+        return;
+      }
+      await upsertProfile(session.user);
+      remoteReady = true;
+      await loadRemoteData();
+      render();
+    });
+  }
+}
+
+boot();
