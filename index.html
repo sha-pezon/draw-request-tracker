@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Draw Request and Holdback Tracker</title>
+    <title>Pezon Construction Draw Tracker</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -13,9 +13,9 @@
   <body>
     <section class="login-overlay" id="loginOverlay" aria-label="Account sign in">
       <form class="login-card" id="loginForm">
-        <div class="brand-mark"><i data-lucide="clipboard-check"></i></div>
+        <img class="login-logo" src="./assets/pezon-properties-logo.png" alt="Pezon Properties" />
         <p class="eyebrow">Pezon Properties access</p>
-        <h1>Sign in to DrawOps</h1>
+        <h1>Sign in to the draw tracker</h1>
         <p>Use a Pezon Properties email to identify your edits and activity in the tracker.</p>
         <label>
           <span>Name</span>
@@ -34,10 +34,10 @@
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
-          <div class="brand-mark"><i data-lucide="clipboard-check"></i></div>
+          <img class="brand-logo" src="./assets/pezon-properties-logo.png" alt="Pezon Properties" />
           <div>
-            <strong>DrawOps</strong>
-            <span>Holdback tracker</span>
+            <strong>Pezon Properties</strong>
+            <span>Draw tracker</span>
           </div>
         </div>
         <nav class="nav">
@@ -58,7 +58,7 @@
         <header class="topbar">
           <div>
             <p class="eyebrow">Construction finance</p>
-            <h1>Draw Request and Holdback Tracker</h1>
+            <h1>Pezon Construction Draw Tracker</h1>
           </div>
           <div class="topbar-actions">
             <button class="ghost-button" id="accountButton"><i data-lucide="user"></i><span id="accountName">Sign in</span></button>
@@ -71,8 +71,8 @@
         <section class="team-strip" aria-label="Team sharing controls">
           <div>
             <p class="eyebrow">Team workspace</p>
-            <h2>Hosted tracker setup</h2>
-            <p>Use one shared URL for the app. Export and import tracker data when handing off updates until a shared database is connected.</p>
+            <h2>Shared company tracker</h2>
+            <p>Use one shared URL for draw requests, supporting documents, budget checks, holdbacks, and team activity.</p>
           </div>
           <div class="team-actions">
             <button class="ghost-button" id="saveLocal"><i data-lucide="save"></i><span>Save changes</span></button>

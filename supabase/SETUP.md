@@ -1,4 +1,4 @@
-# Supabase Free Setup For DrawOps
+# Supabase Free Setup For Pezon Construction Draw Tracker
 
 1. Create a free Supabase project.
 2. Open the Supabase SQL Editor and run `supabase/schema.sql`.

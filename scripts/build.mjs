@@ -5,11 +5,13 @@ const files = {
   "/index.html": ["index.html", "text/html; charset=utf-8"],
   "/styles.css": ["styles.css", "text/css; charset=utf-8"],
   "/app.js": ["app.js", "application/javascript; charset=utf-8"],
-  "/config.js": ["config.js", "application/javascript; charset=utf-8"]
+  "/config.js": ["config.js", "application/javascript; charset=utf-8"],
+  "/assets/pezon-properties-logo.png": ["assets/pezon-properties-logo.png", "image/png"]
 };
 
 await mkdir("dist/server", { recursive: true });
 await mkdir("dist/.openai", { recursive: true });
+await mkdir("dist/assets", { recursive: true });
 
 await writeFile(
   "config.js",
