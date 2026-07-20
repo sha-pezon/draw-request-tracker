@@ -2,7 +2,7 @@
 
 1. Create a free Supabase project.
 2. Open the Supabase SQL Editor and run `supabase/schema.sql`.
-3. In Authentication settings, enable either Email OTP or Google login.
+3. In Authentication settings, enable Email OTP.
 4. Add the live tracker URL to allowed redirect URLs.
    For Vercel, use the production URL Vercel gives you, for example:
    `https://your-project-name.vercel.app`

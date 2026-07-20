@@ -756,23 +756,6 @@ function bindEvents() {
     document.getElementById("loginName").value = account?.name || "";
     document.getElementById("loginEmail").value = account?.email || "";
   });
-  document.getElementById("googleLogin").addEventListener("click", async () => {
-    const error = document.getElementById("loginError");
-    if (!supabaseClient) {
-      error.textContent = "Google login is available after Supabase keys are configured.";
-      return;
-    }
-    const { error: signInError } = await supabaseClient.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: window.location.origin + window.location.pathname,
-        queryParams: {
-          hd: companyDomain
-        }
-      }
-    });
-    if (signInError) error.textContent = signInError.message;
-  });
   document.getElementById("searchInput").addEventListener("input", render);
   document.getElementById("projectForm").addEventListener("input", () => {
     updateProjectFromForm();
