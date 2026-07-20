@@ -16,7 +16,7 @@
         <img class="login-logo" src="./assets/pezon-properties-logo.png" alt="Pezon Properties" />
         <p class="eyebrow">Pezon Properties access</p>
         <h1>Sign in to the draw tracker</h1>
-        <p>Use a Pezon Properties email to identify your edits and activity in the tracker.</p>
+        <p>Create an account once with your Pezon Properties email. After confirmation, sign in with email and password.</p>
         <label>
           <span>Name</span>
           <input id="loginName" type="text" autocomplete="name" required />
@@ -25,8 +25,13 @@
           <span>Work email</span>
           <input id="loginEmail" type="email" autocomplete="email" placeholder="name@pezonproperties.com" required />
         </label>
+        <label>
+          <span>Password</span>
+          <input id="loginPassword" type="password" autocomplete="current-password" minlength="8" required />
+        </label>
         <div class="login-error" id="loginError"></div>
-        <button class="primary-button" type="submit"><i data-lucide="log-in"></i><span>Email sign-in link</span></button>
+        <button class="primary-button" type="submit"><i data-lucide="log-in"></i><span>Sign in</span></button>
+        <button class="ghost-button" id="createAccount" type="button"><i data-lucide="user-plus"></i><span>Create account</span></button>
       </form>
     </section>
 

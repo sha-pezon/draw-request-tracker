@@ -200,6 +200,7 @@ if (!window.lucide) {
     "sparkles": ["M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z", "M5 4v3", "M3.5 5.5h3", "M19 17v3", "M17.5 18.5h3"],
     "upload": ["M12 16V4", "m7 9 5-5 5 5", "M5 20h14"],
     "user": ["M20 21a8 8 0 0 0-16 0", "M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"],
+    "user-plus": ["M16 21a6 6 0 0 0-12 0", "M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z", "M19 8v6", "M16 11h6"],
     "users": ["M16 21a6 6 0 0 0-12 0", "M10 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z", "M22 21a5 5 0 0 0-5-5", "M17 3a3 3 0 0 1 0 6"],
     "wallet-cards": ["M4 7h16v12H4z", "M4 10h16", "M15 15h3"],
     "x": ["M18 6 6 18", "M6 6l12 12"]
@@ -332,7 +333,7 @@ function renderAccount() {
   const loginCopy = document.querySelector(".login-card p:not(.eyebrow)");
   if (loginCopy) {
     loginCopy.textContent = supabaseClient
-      ? `Use your @${companyDomain} email. Supabase will verify the account before loading shared data.`
+      ? `Use your @${companyDomain} email and password. New accounts need one email confirmation before first sign-in.`
       : `Use a Pezon Properties email to identify your edits and activity in this browser.`;
   }
   if (!account) {
@@ -725,24 +726,17 @@ function bindEvents() {
     event.preventDefault();
     const name = document.getElementById("loginName").value.trim();
     const email = document.getElementById("loginEmail").value.trim().toLowerCase();
+    const password = document.getElementById("loginPassword").value;
     const error = document.getElementById("loginError");
     if (!emailAllowed(email)) {
       error.textContent = `Use an @${companyDomain} email address.`;
       return;
     }
     if (supabaseClient) {
-      error.textContent = "Sending secure sign-in link...";
-      supabaseClient.auth
-        .signInWithOtp({
-          email,
-          options: {
-            emailRedirectTo: window.location.origin + window.location.pathname,
-            data: { full_name: name }
-          }
-        })
-        .then(({ error: signInError }) => {
-          error.textContent = signInError ? signInError.message : "Check your email for the sign-in link.";
-        });
+      error.textContent = "Signing in...";
+      supabaseClient.auth.signInWithPassword({ email, password }).then(({ error: signInError }) => {
+        error.textContent = signInError ? signInError.message : "";
+      });
       return;
     }
     account = { name, email, signedInAt: new Date().toISOString() };
@@ -755,6 +749,39 @@ function bindEvents() {
     document.getElementById("loginOverlay").classList.add("active");
     document.getElementById("loginName").value = account?.name || "";
     document.getElementById("loginEmail").value = account?.email || "";
+  });
+  document.getElementById("createAccount").addEventListener("click", async () => {
+    const name = document.getElementById("loginName").value.trim();
+    const email = document.getElementById("loginEmail").value.trim().toLowerCase();
+    const password = document.getElementById("loginPassword").value;
+    const error = document.getElementById("loginError");
+    if (!emailAllowed(email)) {
+      error.textContent = `Use an @${companyDomain} email address.`;
+      return;
+    }
+    if (password.length < 8) {
+      error.textContent = "Use at least 8 characters for the password.";
+      return;
+    }
+    if (!supabaseClient) {
+      account = { name, email, signedInAt: new Date().toISOString() };
+      localStorage.setItem(accountKey, JSON.stringify(account));
+      renderAccount();
+      recordActivity("Created local account", "Account", email);
+      return;
+    }
+    error.textContent = "Creating account...";
+    const { error: signUpError } = await supabaseClient.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: window.location.origin + window.location.pathname,
+        data: { full_name: name }
+      }
+    });
+    error.textContent = signUpError
+      ? signUpError.message
+      : "Check your email once to confirm the account. After that, sign in here with your password.";
   });
   document.getElementById("searchInput").addEventListener("input", render);
   document.getElementById("projectForm").addEventListener("input", () => {
