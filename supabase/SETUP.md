@@ -3,7 +3,10 @@
 1. Create a free Supabase project.
 2. Open the Supabase SQL Editor and run `supabase/schema.sql`.
 3. In Authentication settings, enable either Email OTP or Google login.
-4. Add the live tracker URL to allowed redirect URLs:
+4. Add the live tracker URL to allowed redirect URLs.
+   For Vercel, use the production URL Vercel gives you, for example:
+   `https://your-project-name.vercel.app`
+   The current prototype URL is:
    `https://draw-request-tracker.shahir568344.chatgpt.site`
 5. Copy the project URL and anon public key from Project Settings > API.
 6. Set these hosting environment variables:
