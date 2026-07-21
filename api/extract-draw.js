@@ -1,4 +1,4 @@
-const MAX_FILE_BYTES = 8 * 1024 * 1024;
+const MAX_FILE_BYTES = 12 * 1024 * 1024;
 const COMPANY_DOMAIN = (process.env.COMPANY_DOMAIN || "pezonproperties.com").toLowerCase();
 
 const drawExtractionSchema = {
@@ -112,7 +112,7 @@ async function readRequestBody(req) {
   for await (const chunk of req) {
     total += chunk.length;
     if (total > MAX_FILE_BYTES + 1024 * 1024) {
-      throw new Error("File is too large. Please upload a PDF or DOCX under 8 MB.");
+      throw new Error("File is too large. Please upload a document or image under 12 MB.");
     }
     chunks.push(chunk);
   }
@@ -146,9 +146,29 @@ function parseMultipart(buffer, contentType) {
 function isSupportedFile(file) {
   return (
     file.type === "application/pdf" ||
+    file.type === "application/msword" ||
     file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
-    /\.(pdf|docx)$/i.test(file.filename)
+    file.type.startsWith("image/") ||
+    /\.(pdf|doc|docx|jpe?g|png|webp|heic|heif)$/i.test(file.filename)
   );
+}
+
+function isImage(file) {
+  return file.type.startsWith("image/") || /\.(jpe?g|png|webp|heic|heif)$/i.test(file.filename);
+}
+
+function normalizeMimeType(file) {
+  const name = file.filename.toLowerCase();
+  if (file.type && file.type !== "application/octet-stream") return file.type;
+  if (name.endsWith(".pdf")) return "application/pdf";
+  if (name.endsWith(".doc")) return "application/msword";
+  if (name.endsWith(".docx")) return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if (name.endsWith(".jpg") || name.endsWith(".jpeg")) return "image/jpeg";
+  if (name.endsWith(".png")) return "image/png";
+  if (name.endsWith(".webp")) return "image/webp";
+  if (name.endsWith(".heic")) return "image/heic";
+  if (name.endsWith(".heif")) return "image/heif";
+  return file.type || "application/octet-stream";
 }
 
 async function verifyUser(req) {
@@ -187,7 +207,21 @@ async function extractWithOpenAI(file) {
     throw new Error("OPENAI_API_KEY is not configured in Vercel.");
   }
 
+  file.type = normalizeMimeType(file);
   const dataUrl = `data:${file.type};base64,${file.data.toString("base64")}`;
+  const uploadedContent = isImage(file)
+    ? {
+        type: "input_image",
+        image_url: dataUrl,
+        detail: "high"
+      }
+    : {
+        type: "input_file",
+        filename: file.filename,
+        file_data: dataUrl,
+        detail: file.type === "application/pdf" ? "high" : undefined
+      };
+
   const response = await fetch("https://api.openai.com/v1/responses", {
     method: "POST",
     headers: {
@@ -200,19 +234,16 @@ async function extractWithOpenAI(file) {
         {
           role: "user",
           content: [
-            {
-              type: "input_file",
-              filename: file.filename,
-              file_data: dataUrl,
-              detail: file.type === "application/pdf" ? "high" : undefined
-            },
+            uploadedContent,
             {
               type: "input_text",
               text:
-                "Extract this construction draw, SOW, invoice, inspection, or lender package into tracker fields. " +
-                "Only use facts visible in the document. Use 0 or an empty string when a value is not present. " +
-                "Determine what is ready for draw submission, what documentation is missing, and which line items need follow-up. " +
-                "For expectedNextDrawDate, use the executed Scope of Work milestone date when present."
+                "You are reading a construction draw tracker source file for Pezon Properties. It may be a PDF, Word document, scanned invoice, SOW, draw approval, inspection report, lender package, or progress photo. " +
+                "Extract only facts visible in the file. Do not guess numbers, dates, property names, contractor names, or status. Use 0 or an empty string when a value is not present. " +
+                "Prefer exact dollar amounts and ISO dates. Distinguish submitted construction budget, requested draw amount, approved draw amount, remaining budget, holdback total, and holdback eligible/releasable. " +
+                "Identify what is ready for draw submission, what documentation is missing, and which line items need follow-up. " +
+                "For expectedNextDrawDate, use the executed Scope of Work milestone/date only when present. " +
+                "For photos, describe what evidence the photo does or does not prove for lender requirements."
             }
           ].filter(Boolean)
         }
@@ -247,10 +278,10 @@ module.exports = async function handler(req, res) {
     const body = await readRequestBody(req);
     const file = parseMultipart(body, contentType);
     if (!isSupportedFile(file)) {
-      return send(res, 400, { error: "Please upload a PDF or DOCX file." });
+      return send(res, 400, { error: "Please upload a PDF, Word document, or image file." });
     }
     if (file.data.length > MAX_FILE_BYTES) {
-      return send(res, 413, { error: "File is too large. Please upload a PDF or DOCX under 8 MB." });
+      return send(res, 413, { error: "File is too large. Please upload a document or image under 12 MB." });
     }
 
     const extraction = await extractWithOpenAI(file);

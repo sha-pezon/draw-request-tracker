@@ -672,22 +672,43 @@ function hasValue(value) {
 
 function inferDocumentTitle(file) {
   return file.name
-    .replace(/\.(pdf|docx)$/i, "")
+    .replace(/\.(pdf|doc|docx|jpe?g|png|webp|heic|heif)$/i, "")
     .replace(/[_-]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }
 
-async function importDocument(file) {
-  const isSupported =
-    file.type === "application/pdf" ||
+function fileKind(file) {
+  const name = file.name.toLowerCase();
+  if (file.type.startsWith("image/") || /\.(jpe?g|png|webp|heic|heif)$/i.test(name)) return "Photo";
+  if (file.type === "application/pdf" || /\.pdf$/i.test(name)) return "PDF";
+  if (
+    file.type === "application/msword" ||
     file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
-    /\.(pdf|docx)$/i.test(file.name);
-  if (!isSupported) return false;
+    /\.(doc|docx)$/i.test(name)
+  ) {
+    return "Word document";
+  }
+  return "";
+}
 
+function readImagePreview(file) {
+  if (fileKind(file) !== "Photo") return Promise.resolve("");
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(reader.result || ""));
+    reader.addEventListener("error", () => resolve(""));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function importDocument(file) {
+  const documentKind = fileKind(file);
+  if (!documentKind) return false;
+
+  const imagePreview = await readImagePreview(file);
   const title = inferDocumentTitle(file);
   const lowerTitle = title.toLowerCase();
-  const documentKind = /\.docx$/i.test(file.name) ? "DOCX" : "PDF";
   const contractor = lowerTitle.includes("ignite") ? "Ignite Construction" : "Contractor pending";
   const projectName = lowerTitle.includes("3606") ? "3606 Springer Street" : project.projectName.replace(/ · .*/, "");
   const nextNumber = String(draws.length + 1).padStart(3, "0");
@@ -704,25 +725,26 @@ async function importDocument(file) {
     holdbackTotal: 0,
     holdbackEligible: 0,
     inspection: "Pending",
-    update: `${documentKind} imported from ${file.name}. Review the document, then edit the draw details, budget line, required documents, inspection status, and holdback release before submission.`,
+    update: `${documentKind} uploaded from ${file.name}. AI will read the file and prefill draw details. Review the extracted contractor, budget, completion, inspection, photo evidence, and holdback fields before submission.`,
     sourceFile: {
       name: file.name,
       type: documentKind,
       size: file.size,
       importedAt: new Date().toISOString(),
+      previewUrl: imagePreview,
       aiStatus: "Analyzing",
       aiMessage: "AI is reading the document and extracting draw details."
     },
     requirements: [
-      [`${documentKind} source document`, true, file.name],
+      [`${documentKind} source file`, true, file.name],
       ["Contractor invoice", lowerTitle.includes("invoice"), lowerTitle.includes("invoice") ? "Invoice document imported" : "Confirm invoice is included"],
-      ["Progress photos", false, "Attach or verify progress photos"],
+      ["Progress photos", documentKind === "Photo", documentKind === "Photo" ? "Uploaded photo evidence for AI review" : "Attach or verify progress photos"],
       ["Inspection report", false, "Enter current inspection status"],
       ["Conditional lien waiver", false, "Confirm waiver before submission"],
       ["eBudget line match", false, "Match imported request against the approved budget line"]
     ],
     lines: [["Imported eBudget line", 0, 0]],
-    photos: [["Photo evidence needed", "Attach or verify photos", "https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=800&q=80"]],
+    photos: [[documentKind === "Photo" ? "Uploaded progress photo" : "Photo evidence needed", documentKind === "Photo" ? file.name : "Attach or verify photos", imagePreview || "https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=800&q=80"]],
     followUps: [
       ["Review imported document", "Confirm contractor, property, requested amount, budget line, and holdback balance"],
       ["Complete lender checklist", "Add photos, inspection status, lien waiver, and eBudget support"]
@@ -802,7 +824,13 @@ function applyExtraction(draw, extraction) {
 
   const extractedPhotos = (extraction.photos || [])
     .filter((item) => item.title)
-    .map((item) => [item.title, item.note || "Review photo support", "https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=800&q=80"]);
+    .map((item, index) => [
+      item.title,
+      item.note || "Review photo support",
+      index === 0 && draw.sourceFile?.previewUrl
+        ? draw.sourceFile.previewUrl
+        : "https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=800&q=80"
+    ]);
   if (extractedPhotos.length) draw.photos = extractedPhotos;
 
   const extractedFollowUps = (extraction.followUps || [])
@@ -1386,7 +1414,7 @@ function bindEvents() {
     const [file] = event.target.files;
     if (!file) return;
     if (!(await importDocument(file))) {
-      alert("Please import a PDF or DOCX file.");
+      alert("Please upload a PDF, Word document, or image file.");
     }
     event.target.value = "";
   });

@@ -21,9 +21,9 @@ The anon key is safe to expose in browser apps when Row Level Security is enable
 The schema restricts shared tracker access to authenticated users whose email ends in `@pezonproperties.com`.
 New users create an account once, confirm their email, then sign in with email and password.
 
-AI document extraction runs through the Vercel server function at `/api/extract-draw`.
+AI document/photo extraction runs through the Vercel server function at `/api/extract-draw`.
 The OpenAI key must stay in Vercel environment variables and should never be placed in `config.js` or browser code.
-If `OPENAI_API_KEY` is missing, PDF/DOCX imports still create editable draft draw records, but AI extraction will show a needs-review message.
+If `OPENAI_API_KEY` is missing, PDF, Word, and image uploads still create editable draft draw records, but AI extraction will show a needs-review message.
 
 For v1, draw records are stored as one shared JSON state row plus a separate activity log table.
 That keeps the free version simple. Later, the same project can be migrated into fully relational tables for reporting.
