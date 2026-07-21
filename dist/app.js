@@ -322,6 +322,15 @@ function money(value) {
   return currency.format(value);
 }
 
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
 function moneyCents(value) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -361,6 +370,15 @@ function initials(name) {
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase())
     .join("");
+}
+
+function nameFromEmail(email) {
+  return String(email || "User")
+    .split("@")[0]
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((part) => part[0].toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function recordActivity(action, target, detail = "") {
@@ -600,6 +618,90 @@ function holdbackRemaining(draw) {
   return Math.max(draw.holdbackTotal - draw.holdbackEligible, 0);
 }
 
+function updateDrawStatus(draw) {
+  const missing = missingCount(draw);
+  const overBudget = draw.requested > draw.approvedBudget && draw.approvedBudget > 0;
+  if (draw.inspection.toLowerCase().includes("failed") || overBudget) {
+    draw.status = "blocked";
+  } else if (missing === 0) {
+    draw.status = "ready";
+  } else {
+    draw.status = "attention";
+  }
+  const requirementScore = Math.round(((draw.requirements.length - missing) / draw.requirements.length) * 70);
+  const completionScore = Math.round(Math.min(draw.completed, 100) * 0.3);
+  draw.readiness = Math.min(99, Math.max(10, requirementScore + completionScore));
+}
+
+function inferDocumentTitle(file) {
+  return file.name
+    .replace(/\.(pdf|docx)$/i, "")
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function importDocument(file) {
+  const isSupported =
+    file.type === "application/pdf" ||
+    file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+    /\.(pdf|docx)$/i.test(file.name);
+  if (!isSupported) return false;
+
+  const title = inferDocumentTitle(file);
+  const lowerTitle = title.toLowerCase();
+  const documentKind = /\.docx$/i.test(file.name) ? "DOCX" : "PDF";
+  const contractor = lowerTitle.includes("ignite") ? "Ignite Construction" : "Contractor pending";
+  const projectName = lowerTitle.includes("3606") ? "3606 Springer Street" : project.projectName.replace(/ · .*/, "");
+  const nextNumber = String(draws.length + 1).padStart(3, "0");
+  const draw = {
+    id: `DR-DOC-${nextNumber}`,
+    contractor,
+    project: projectName,
+    period: "Imported document",
+    status: "attention",
+    readiness: 36,
+    requested: 0,
+    approvedBudget: 0,
+    completed: 0,
+    holdbackTotal: 0,
+    holdbackEligible: 0,
+    inspection: "Pending",
+    update: `${documentKind} imported from ${file.name}. Review the document, then edit the draw details, budget line, required documents, inspection status, and holdback release before submission.`,
+    sourceFile: {
+      name: file.name,
+      type: documentKind,
+      size: file.size,
+      importedAt: new Date().toISOString()
+    },
+    requirements: [
+      [`${documentKind} source document`, true, file.name],
+      ["Contractor invoice", lowerTitle.includes("invoice"), lowerTitle.includes("invoice") ? "Invoice document imported" : "Confirm invoice is included"],
+      ["Progress photos", false, "Attach or verify progress photos"],
+      ["Inspection report", false, "Enter current inspection status"],
+      ["Conditional lien waiver", false, "Confirm waiver before submission"],
+      ["eBudget line match", false, "Match imported request against the approved budget line"]
+    ],
+    lines: [["Imported eBudget line", 0, 0]],
+    photos: [["Photo evidence needed", "Attach or verify photos", "https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=800&q=80"]],
+    followUps: [
+      ["Review imported document", "Confirm contractor, property, requested amount, budget line, and holdback balance"],
+      ["Complete lender checklist", "Add photos, inspection status, lien waiver, and eBudget support"]
+    ]
+  };
+
+  draws.unshift(draw);
+  activeId = draw.id;
+  activeView = "draws";
+  document.querySelectorAll(".nav-item[data-view]").forEach((item) => {
+    item.classList.toggle("active", item.dataset.view === "draws");
+  });
+  updateDrawStatus(draw);
+  recordActivity("Imported document", draw.id, file.name);
+  render();
+  return true;
+}
+
 function renderMetrics(items) {
   document.getElementById("requestedMetric").textContent = money(
     items.reduce((sum, draw) => sum + draw.requested, 0)
@@ -633,7 +735,14 @@ function filteredDraws() {
   return draws
     .filter((draw) => filter === "all" || draw.status === filter)
     .filter((draw) => !term || matchesSearch(draw, term))
-    .sort((a, b) => (sortHighFirst ? b.readiness - a.readiness : a.readiness - b.readiness));
+    .sort((a, b) => {
+      if (a.sourceFile && b.sourceFile) {
+        return new Date(b.sourceFile.importedAt) - new Date(a.sourceFile.importedAt);
+      }
+      if (a.sourceFile) return -1;
+      if (b.sourceFile) return 1;
+      return sortHighFirst ? b.readiness - a.readiness : a.readiness - b.readiness;
+    });
 }
 
 function renderList() {
@@ -706,10 +815,75 @@ function renderDetail() {
       <span class="badge ${draw.status}"><i data-lucide="${stateIcons[draw.status]}"></i>${stateLabels[draw.status]}</span>
     </div>
     <div class="detail-content">
+      ${renderEditableDrawForm(draw)}
       ${renderDetailSections(draw, overBudget, eligibleRelease)}
     </div>
   `;
   lucide.createIcons();
+}
+
+function renderEditableDrawForm(draw) {
+  return `
+    <section class="section-box edit-draw-box">
+      <div class="edit-head">
+        <div>
+          <p class="eyebrow">Editable draw record</p>
+          <h3>Draw details</h3>
+        </div>
+        ${draw.sourceFile ? `<span class="badge attention"><i data-lucide="upload"></i>${draw.sourceFile.type} imported</span>` : ""}
+      </div>
+      ${
+        draw.sourceFile
+          ? `<div class="source-file">
+              <strong>${escapeHtml(draw.sourceFile.name)}</strong>
+              <span>${Math.max(1, Math.round(draw.sourceFile.size / 1024))} KB imported ${formatDate(draw.sourceFile.importedAt.slice(0, 10))}</span>
+            </div>`
+          : ""
+      }
+      <form class="draw-edit-form" id="drawEditForm">
+        <label>
+          <span>Contractor</span>
+          <input data-draw-field="contractor" type="text" value="${escapeHtml(draw.contractor)}" />
+        </label>
+        <label>
+          <span>Property</span>
+          <input data-draw-field="project" type="text" value="${escapeHtml(draw.project)}" />
+        </label>
+        <label>
+          <span>Period / milestone</span>
+          <input data-draw-field="period" type="text" value="${escapeHtml(draw.period)}" />
+        </label>
+        <label>
+          <span>Inspection status</span>
+          <input data-draw-field="inspection" type="text" value="${escapeHtml(draw.inspection)}" />
+        </label>
+        <label>
+          <span>Requested amount</span>
+          <input data-draw-field="requested" type="number" min="0" step="0.01" value="${draw.requested}" />
+        </label>
+        <label>
+          <span>Budget line total</span>
+          <input data-draw-field="approvedBudget" type="number" min="0" step="0.01" value="${draw.approvedBudget}" />
+        </label>
+        <label>
+          <span>Completion %</span>
+          <input data-draw-field="completed" type="number" min="0" max="100" step="1" value="${draw.completed}" />
+        </label>
+        <label>
+          <span>Total holdback</span>
+          <input data-draw-field="holdbackTotal" type="number" min="0" step="0.01" value="${draw.holdbackTotal}" />
+        </label>
+        <label>
+          <span>Holdback eligible</span>
+          <input data-draw-field="holdbackEligible" type="number" min="0" step="0.01" value="${draw.holdbackEligible}" />
+        </label>
+        <label class="wide">
+          <span>Contractor update</span>
+          <textarea data-draw-field="update" rows="3">${escapeHtml(draw.update)}</textarea>
+        </label>
+      </form>
+    </section>
+  `;
 }
 
 function renderDetailSections(draw, overBudget, eligibleRelease) {
@@ -842,6 +1016,20 @@ function recommendation(draw, overBudget, eligibleRelease) {
   return `Close, but not clean enough for submission. Resolve ${missingCount(draw)} missing requirement${missingCount(draw) === 1 ? "" : "s"} before sending to the lender. Holdback can be partially released once the open evidence is attached.`;
 }
 
+function updateActiveDrawFromField(input) {
+  const draw = draws.find((item) => item.id === activeId);
+  if (!draw) return;
+  const field = input.dataset.drawField;
+  const numericFields = ["requested", "approvedBudget", "completed", "holdbackTotal", "holdbackEligible"];
+  draw[field] = numericFields.includes(field) ? Number(input.value || 0) : input.value.trim();
+  if (field === "requested" && draw.lines[0]) draw.lines[0][2] = draw.requested;
+  if (field === "approvedBudget" && draw.lines[0]) draw.lines[0][1] = draw.approvedBudget;
+  updateDrawStatus(draw);
+  saveData();
+  recordActivity("Edited draw", draw.id, field);
+  render();
+}
+
 function bindEvents() {
   document.querySelectorAll(".nav-item[data-view]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -892,11 +1080,16 @@ function bindEvents() {
       });
       return;
     }
-    account = { name, email, signedInAt: new Date().toISOString() };
+    account = { name: name || nameFromEmail(email), email, signedInAt: new Date().toISOString() };
     localStorage.setItem(accountKey, JSON.stringify(account));
     error.textContent = "";
     renderAccount();
     recordActivity("Signed in", "Account", email);
+  });
+  document.getElementById("detailPanel").addEventListener("change", (event) => {
+    if (event.target.matches("[data-draw-field]")) {
+      updateActiveDrawFromField(event.target);
+    }
   });
   document.getElementById("accountButton").addEventListener("click", () => {
     document.getElementById("loginOverlay").classList.add("active");
@@ -917,7 +1110,7 @@ function bindEvents() {
       return;
     }
     if (!supabaseClient) {
-      account = { name, email, signedInAt: new Date().toISOString() };
+      account = { name: name || nameFromEmail(email), email, signedInAt: new Date().toISOString() };
       localStorage.setItem(accountKey, JSON.stringify(account));
       renderAccount();
       recordActivity("Created local account", "Account", email);
@@ -929,7 +1122,7 @@ function bindEvents() {
       password,
       options: {
         emailRedirectTo: window.location.origin + window.location.pathname,
-        data: { full_name: name }
+        data: { full_name: name || nameFromEmail(email) }
       }
     });
     error.textContent = signUpError
@@ -983,16 +1176,9 @@ function bindEvents() {
   document.getElementById("importData").addEventListener("change", async (event) => {
     const [file] = event.target.files;
     if (!file) return;
-    const payload = JSON.parse(await file.text());
-    project = { ...defaultProject, ...(payload.project || {}) };
-    if (Array.isArray(payload.draws)) {
-      draws.splice(0, draws.length, ...payload.draws);
-      activeId = draws[0]?.id || "";
+    if (!importDocument(file)) {
+      alert("Please import a PDF or DOCX file.");
     }
-    if (Array.isArray(payload.activity)) activity = payload.activity;
-    recordActivity("Imported data", file.name);
-    saveData();
-    render();
     event.target.value = "";
   });
   document.getElementById("resetData").addEventListener("click", () => {

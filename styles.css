@@ -797,6 +797,70 @@ h3 {
   background: #fff;
 }
 
+.edit-draw-box {
+  background: #fbfcfe;
+}
+
+.edit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.source-file {
+  display: grid;
+  gap: 3px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.source-file span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.draw-edit-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.draw-edit-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.draw-edit-form label.wide {
+  grid-column: 1 / -1;
+}
+
+.draw-edit-form span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.draw-edit-form input,
+.draw-edit-form textarea {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--ink);
+  background: #fff;
+}
+
+.draw-edit-form textarea {
+  resize: vertical;
+  line-height: 1.45;
+}
+
 .requirement-list,
 .budget-list,
 .task-list {
@@ -922,7 +986,8 @@ svg {
   .metrics,
   .two-col,
   .review-grid,
-  .project-form {
+  .project-form,
+  .draw-edit-form {
     grid-template-columns: 1fr;
   }
 
