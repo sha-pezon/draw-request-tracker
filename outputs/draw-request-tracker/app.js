@@ -1,4 +1,41 @@
-const draws = [
+const defaultDraws = [
+  {
+    id: "DR-3606-04",
+    contractor: "Ignite Construction",
+    project: "3606 Springer Street",
+    period: "Draw approved Jul 8, 2026",
+    status: "ready",
+    readiness: 99,
+    requested: 10773.77,
+    approvedBudget: 92525,
+    completed: 86,
+    holdbackTotal: 9252.5,
+    holdbackEligible: 6682.5,
+    inspection: "Approved",
+    update: "Draw #4 was approved and is ready to use as the boss-demo test property. Next draw prep should start from the executed SOW milestone date.",
+    requirements: [
+      ["Contractor invoice", true, "Draw #4 invoice package approved"],
+      ["Progress photos", true, "Photo support attached to approved draw package"],
+      ["Inspection status", true, "Approved July 8, 2026"],
+      ["Conditional lien waiver", true, "Waiver confirmation included for demo tracking"],
+      ["eBudget line match", true, "Submitted construction budget is $92,525.00"],
+      ["Executed SOW next milestone", true, "Use July 29, 2026 as the test next draw date"]
+    ],
+    lines: [
+      ["3606 Springer construction budget", 92525, 10773.77],
+      ["Remaining construction budget", 13319.14, 0],
+      ["Inspection fee tracked separately", 250, 250]
+    ],
+    photos: [
+      ["Exterior progress", "Approved draw photo set", "https://images.unsplash.com/photo-1600566753190-17f0baa2a6c3?auto=format&fit=crop&w=800&q=80"],
+      ["Interior renovation", "Photo evidence reviewed", "https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?auto=format&fit=crop&w=800&q=80"]
+    ],
+    followUps: [
+      ["Prepare next draw request", "Test date: July 29, 2026 from the executed SOW milestone"],
+      ["Confirm fresh Ignite invoice", "Needed before submitting the next lender package"],
+      ["Refresh photos and inspection status", "Update evidence before next draw submission"]
+    ]
+  },
   {
     id: "DR-004",
     contractor: "Northline Framing",
@@ -134,7 +171,10 @@ const draws = [
   }
 ];
 
-const storageKey = "drawops-tracker-v2";
+const draws = cloneData(defaultDraws);
+
+const storageKey = "pezon-draw-tracker-v3";
+const legacyStorageKeys = ["drawops-tracker-v2"];
 const accountKey = "drawops-account-v1";
 const defaultProject = {
   projectName: "3606 Springer Street · Draw #4",
@@ -144,7 +184,7 @@ const defaultProject = {
   netWireAmount: 10523.77,
   approvedDate: "2026-07-08",
   remainingBudget: 13319.14,
-  nextDrawDate: "",
+  nextDrawDate: "2026-07-29",
   reminderLeadDays: 3
 };
 
@@ -153,6 +193,7 @@ let activity = [];
 let account = null;
 let remoteReady = false;
 let remoteSaveTimer = null;
+let passwordRecoveryMode = false;
 
 const drawopsConfig = window.DRAWOPS_CONFIG || {};
 const companyDomain = (drawopsConfig.companyDomain || "pezonproperties.com").toLowerCase();
@@ -173,6 +214,31 @@ try {
   localStorage.removeItem(storageKey);
   localStorage.removeItem(accountKey);
 }
+
+function cloneData(value) {
+  return JSON.parse(JSON.stringify(value));
+}
+
+function resetSampleData() {
+  project = { ...defaultProject };
+  draws.splice(0, draws.length, ...cloneData(defaultDraws));
+  activeId = draws[0]?.id || "";
+  activity = [];
+  saveData();
+  recordActivity("Reset sample", "Demo data", "Loaded 3606 Springer Street test property");
+  render();
+}
+
+function ensureDemoProperty() {
+  if (!draws.some((draw) => draw.id === "DR-3606-04")) {
+    draws.unshift(cloneData(defaultDraws[0]));
+  }
+  if (!project.nextDrawDate) {
+    project.nextDrawDate = defaultProject.nextDrawDate;
+  }
+}
+
+ensureDemoProperty();
 
 if (!window.lucide) {
   const iconPaths = {
@@ -332,10 +398,25 @@ function renderAccount() {
   const overlay = document.getElementById("loginOverlay");
   const label = document.getElementById("accountName");
   const loginCopy = document.querySelector(".login-card p:not(.eyebrow)");
+  const loginTitle = document.querySelector(".login-card h1");
+  const submitLabel = document.querySelector("#loginForm .primary-button span");
+  const createButton = document.getElementById("createAccount");
+  const resetButton = document.getElementById("resetPassword");
   if (loginCopy) {
-    loginCopy.textContent = supabaseClient
-      ? `Use your @${companyDomain} email and password. New accounts need one email confirmation before first sign-in.`
-      : `Use a Pezon Properties email to identify your edits and activity in this browser.`;
+    loginCopy.textContent = passwordRecoveryMode
+      ? "Enter a new password to finish resetting your account."
+      : supabaseClient
+        ? `Use your @${companyDomain} email and password. New accounts need one email confirmation before first sign-in.`
+        : `Use a Pezon Properties email to identify your edits and activity in this browser.`;
+  }
+  if (loginTitle) loginTitle.textContent = passwordRecoveryMode ? "Set a new password" : "Sign in to the draw tracker";
+  if (submitLabel) submitLabel.textContent = passwordRecoveryMode ? "Update password" : "Sign in";
+  if (createButton) createButton.hidden = passwordRecoveryMode;
+  if (resetButton) resetButton.hidden = passwordRecoveryMode;
+  if (passwordRecoveryMode) {
+    overlay.classList.add("active");
+    label.textContent = account?.name || "Account";
+    return;
   }
   if (!account) {
     overlay.classList.add("active");
@@ -392,6 +473,7 @@ async function loadRemoteData() {
       timestamp: item.created_at
     }));
   }
+  ensureDemoProperty();
   saveData();
 }
 
@@ -785,6 +867,24 @@ function bindEvents() {
       error.textContent = `Use an @${companyDomain} email address.`;
       return;
     }
+    if (passwordRecoveryMode && supabaseClient) {
+      if (password.length < 8) {
+        error.textContent = "Use at least 8 characters for the new password.";
+        return;
+      }
+      error.textContent = "Updating password...";
+      supabaseClient.auth.updateUser({ password }).then(({ error: updateError }) => {
+        if (updateError) {
+          error.textContent = updateError.message;
+          return;
+        }
+        passwordRecoveryMode = false;
+        error.textContent = "";
+        recordActivity("Updated password", "Account", email);
+        render();
+      });
+      return;
+    }
     if (supabaseClient) {
       error.textContent = "Signing in...";
       supabaseClient.auth.signInWithPassword({ email, password }).then(({ error: signInError }) => {
@@ -836,6 +936,25 @@ function bindEvents() {
       ? signUpError.message
       : "Check your email once to confirm the account. After that, sign in here with your password.";
   });
+  document.getElementById("resetPassword").addEventListener("click", async () => {
+    const email = document.getElementById("loginEmail").value.trim().toLowerCase();
+    const error = document.getElementById("loginError");
+    if (!emailAllowed(email)) {
+      error.textContent = `Enter your @${companyDomain} email first.`;
+      return;
+    }
+    if (!supabaseClient) {
+      error.textContent = "Password reset is available after the shared Supabase connection is enabled.";
+      return;
+    }
+    error.textContent = "Sending password reset...";
+    const { error: resetError } = await supabaseClient.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin + window.location.pathname
+    });
+    error.textContent = resetError
+      ? resetError.message
+      : "Check your email for the password reset link.";
+  });
   document.getElementById("searchInput").addEventListener("input", render);
   document.getElementById("projectForm").addEventListener("input", () => {
     updateProjectFromForm();
@@ -877,8 +996,8 @@ function bindEvents() {
     event.target.value = "";
   });
   document.getElementById("resetData").addEventListener("click", () => {
-    localStorage.removeItem(storageKey);
-    window.location.reload();
+    resetSampleData();
+    flashButton("resetData", "Reset");
   });
   document.getElementById("newDraw").addEventListener("click", () => {
     const nextNumber = String(draws.length + 1).padStart(3, "0");
@@ -985,7 +1104,7 @@ async function boot() {
   await hydrateSupabaseSession();
   render();
   if (supabaseClient) {
-    supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+    supabaseClient.auth.onAuthStateChange(async (event, session) => {
       if (!session?.user) return;
       if (!emailAllowed(session.user.email)) {
         await supabaseClient.auth.signOut();
@@ -997,6 +1116,11 @@ async function boot() {
       await upsertProfile(session.user);
       remoteReady = true;
       await loadRemoteData();
+      if (event === "PASSWORD_RECOVERY") {
+        passwordRecoveryMode = true;
+        document.getElementById("loginPassword").value = "";
+        document.getElementById("loginError").textContent = "Enter a new password to finish the reset.";
+      }
       render();
     });
   }

@@ -168,6 +168,7 @@ button {
 .icon-button,
 .primary-button,
 .ghost-button,
+.text-button,
 .segment,
 .file-button {
   border: 0;
@@ -316,6 +317,20 @@ h3 {
   padding: 0 12px;
   color: var(--blue);
   background: var(--blue-soft);
+}
+
+.text-button {
+  width: fit-content;
+  justify-self: center;
+  padding: 4px 6px;
+  color: var(--blue);
+  background: transparent;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.text-button:hover {
+  text-decoration: underline;
 }
 
 .control-strip {
