@@ -232,6 +232,7 @@ if (!window.lucide) {
 let activeId = draws[0].id;
 let filter = "all";
 let sortHighFirst = true;
+let activeView = "dashboard";
 
 const currency = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -600,13 +601,19 @@ function renderDetail() {
 
   const overBudget = draw.requested - draw.approvedBudget;
   const eligibleRelease = Math.min(draw.requested, draw.approvedBudget) - holdbackRemaining(draw);
+  const focusedTitle = {
+    requirements: "Lender requirements",
+    photos: "Photo evidence",
+    followup: "Follow-up queue"
+  }[activeView];
   const detail = document.getElementById("detailPanel");
   detail.innerHTML = `
     <div class="detail-head">
       <div>
-        <p class="eyebrow">${draw.id} readiness review</p>
-        <h2>${draw.contractor}</h2>
+        <p class="eyebrow">${draw.id} ${focusedTitle ? "focused view" : "readiness review"}</p>
+        <h2>${focusedTitle || draw.contractor}</h2>
         <div class="detail-meta">
+          ${focusedTitle ? `<span>${draw.contractor}</span><span>·</span>` : ""}
           <span>${draw.project}</span>
           <span>·</span>
           <span>${draw.period}</span>
@@ -617,98 +624,130 @@ function renderDetail() {
       <span class="badge ${draw.status}"><i data-lucide="${stateIcons[draw.status]}"></i>${stateLabels[draw.status]}</span>
     </div>
     <div class="detail-content">
-      <div class="stat-grid">
-        <div class="stat"><span>Requested</span><strong>${money(draw.requested)}</strong></div>
-        <div class="stat"><span>Budget line total</span><strong>${money(draw.approvedBudget)}</strong></div>
-        <div class="stat"><span>Completion update</span><strong>${draw.completed}%</strong></div>
-        <div class="stat"><span>Holdback remaining</span><strong>${money(holdbackRemaining(draw))}</strong></div>
-      </div>
-
-      <div class="insight">
-        <h3><i data-lucide="sparkles"></i>AI draw recommendation</h3>
-        <p>${recommendation(draw, overBudget, eligibleRelease)}</p>
-      </div>
-
-      <div class="two-col">
-        <section class="section-box">
-          <h3>Lender requirements</h3>
-          <div class="requirement-list">
-            ${draw.requirements
-              .map(
-                ([label, done, note]) => `
-                  <div class="requirement-row">
-                    <div class="requirement-label">
-                      <strong>${label}</strong>
-                      <span>${note}</span>
-                    </div>
-                    <span class="check ${done ? "done" : "missing"}"><i data-lucide="${done ? "check" : "x"}"></i></span>
-                  </div>`
-              )
-              .join("")}
-          </div>
-        </section>
-
-        <section class="section-box">
-          <h3>Budget comparison</h3>
-          <div class="budget-list">
-            ${draw.lines
-              .map(
-                ([label, budget, requested]) => `
-                  <div class="line-item">
-                    <div class="line-title">
-                      <strong>${label}</strong>
-                      <span>Budget ${money(budget)}</span>
-                    </div>
-                    <div class="line-money">${money(requested)}</div>
-                  </div>`
-              )
-              .join("")}
-          </div>
-          <p class="budget-note">${
-            overBudget > 0
-              ? `Flag: requested amount is ${money(overBudget)} above approved budget.`
-              : `Within approved budget with ${money(Math.abs(overBudget))} remaining before holdback.`
-          }</p>
-        </section>
-      </div>
-
-      <section class="section-box">
-        <h3>Photo evidence</h3>
-        <div class="photo-grid">
-          ${draw.photos
-            .map(
-              ([title, label, url]) => `
-                <div class="photo-tile" style="background-image:url('${url}')">
-                  <strong>${title}</strong>
-                  <span>${label}</span>
-                </div>`
-            )
-            .join("")}
-        </div>
-      </section>
-
-      <section class="section-box">
-        <h3>Follow-up queue</h3>
-        <div class="task-list">
-          ${draw.followUps
-            .map(
-              ([title, note]) => `
-                <div class="task">
-                  <span class="check ${draw.status === "ready" ? "done" : "missing"}"><i data-lucide="${
-                draw.status === "ready" ? "check" : "flag"
-              }"></i></span>
-                  <div>
-                    <strong>${title}</strong>
-                    <div class="task-note">${note}</div>
-                  </div>
-                </div>`
-            )
-            .join("")}
-        </div>
-      </section>
+      ${renderDetailSections(draw, overBudget, eligibleRelease)}
     </div>
   `;
   lucide.createIcons();
+}
+
+function renderDetailSections(draw, overBudget, eligibleRelease) {
+  if (activeView === "requirements") return renderRequirements(draw);
+  if (activeView === "photos") return renderPhotos(draw);
+  if (activeView === "followup") return renderFollowUps(draw);
+
+  return `
+    <div class="stat-grid">
+      <div class="stat"><span>Requested</span><strong>${money(draw.requested)}</strong></div>
+      <div class="stat"><span>Budget line total</span><strong>${money(draw.approvedBudget)}</strong></div>
+      <div class="stat"><span>Completion update</span><strong>${draw.completed}%</strong></div>
+      <div class="stat"><span>Holdback remaining</span><strong>${money(holdbackRemaining(draw))}</strong></div>
+    </div>
+
+    <div class="insight">
+      <h3><i data-lucide="sparkles"></i>AI draw recommendation</h3>
+      <p>${recommendation(draw, overBudget, eligibleRelease)}</p>
+    </div>
+
+    <div class="two-col">
+      ${renderRequirements(draw)}
+      ${renderBudget(draw, overBudget)}
+    </div>
+
+    ${renderPhotos(draw)}
+    ${renderFollowUps(draw)}
+  `;
+}
+
+function renderRequirements(draw) {
+  return `
+    <section class="section-box">
+      <h3>Lender requirements</h3>
+      <div class="requirement-list">
+        ${draw.requirements
+          .map(
+            ([label, done, note]) => `
+              <div class="requirement-row">
+                <div class="requirement-label">
+                  <strong>${label}</strong>
+                  <span>${note}</span>
+                </div>
+                <span class="check ${done ? "done" : "missing"}"><i data-lucide="${done ? "check" : "x"}"></i></span>
+              </div>`
+          )
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderBudget(draw, overBudget) {
+  return `
+    <section class="section-box">
+      <h3>Budget comparison</h3>
+      <div class="budget-list">
+        ${draw.lines
+          .map(
+            ([label, budget, requested]) => `
+              <div class="line-item">
+                <div class="line-title">
+                  <strong>${label}</strong>
+                  <span>Budget ${money(budget)}</span>
+                </div>
+                <div class="line-money">${money(requested)}</div>
+              </div>`
+          )
+          .join("")}
+      </div>
+      <p class="budget-note">${
+        overBudget > 0
+          ? `Flag: requested amount is ${money(overBudget)} above approved budget.`
+          : `Within approved budget with ${money(Math.abs(overBudget))} remaining before holdback.`
+      }</p>
+    </section>
+  `;
+}
+
+function renderPhotos(draw) {
+  return `
+    <section class="section-box">
+      <h3>Photo evidence</h3>
+      <div class="photo-grid">
+        ${draw.photos
+          .map(
+            ([title, label, url]) => `
+              <div class="photo-tile" style="background-image:url('${url}')">
+                <strong>${title}</strong>
+                <span>${label}</span>
+              </div>`
+          )
+          .join("")}
+      </div>
+    </section>
+  `;
+}
+
+function renderFollowUps(draw) {
+  return `
+    <section class="section-box">
+      <h3>Follow-up queue</h3>
+      <div class="task-list">
+        ${draw.followUps
+          .map(
+            ([title, note]) => `
+              <div class="task">
+                <span class="check ${draw.status === "ready" ? "done" : "missing"}"><i data-lucide="${
+              draw.status === "ready" ? "check" : "flag"
+            }"></i></span>
+                <div>
+                  <strong>${title}</strong>
+                  <div class="task-note">${note}</div>
+                </div>
+              </div>`
+          )
+          .join("")}
+      </div>
+    </section>
+  `;
 }
 
 function recommendation(draw, overBudget, eligibleRelease) {
@@ -722,6 +761,20 @@ function recommendation(draw, overBudget, eligibleRelease) {
 }
 
 function bindEvents() {
+  document.querySelectorAll(".nav-item[data-view]").forEach((button) => {
+    button.addEventListener("click", () => {
+      activeView = button.dataset.view;
+      document.querySelectorAll(".nav-item[data-view]").forEach((item) => {
+        item.classList.toggle("active", item === button);
+      });
+      render();
+      const target =
+        activeView === "dashboard"
+          ? document.getElementById("dashboardSection")
+          : document.getElementById("drawsSection");
+      target?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  });
   document.getElementById("loginForm").addEventListener("submit", (event) => {
     event.preventDefault();
     const name = document.getElementById("loginName").value.trim();
