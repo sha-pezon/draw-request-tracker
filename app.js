@@ -633,6 +633,18 @@ function updateDrawStatus(draw) {
   draw.readiness = Math.min(99, Math.max(10, requirementScore + completionScore));
 }
 
+function normalizeDate(value) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+  const parsed = new Date(text);
+  return Number.isNaN(parsed.getTime()) ? "" : parsed.toISOString().slice(0, 10);
+}
+
+function hasValue(value) {
+  return value !== undefined && value !== null && value !== "" && value !== 0;
+}
+
 function inferDocumentTitle(file) {
   return file.name
     .replace(/\.(pdf|docx)$/i, "")
@@ -641,7 +653,7 @@ function inferDocumentTitle(file) {
     .trim();
 }
 
-function importDocument(file) {
+async function importDocument(file) {
   const isSupported =
     file.type === "application/pdf" ||
     file.type === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
@@ -672,7 +684,9 @@ function importDocument(file) {
       name: file.name,
       type: documentKind,
       size: file.size,
-      importedAt: new Date().toISOString()
+      importedAt: new Date().toISOString(),
+      aiStatus: "Analyzing",
+      aiMessage: "AI is reading the document and extracting draw details."
     },
     requirements: [
       [`${documentKind} source document`, true, file.name],
@@ -699,7 +713,89 @@ function importDocument(file) {
   updateDrawStatus(draw);
   recordActivity("Imported document", draw.id, file.name);
   render();
+  analyzeImportedDocument(file, draw.id);
   return true;
+}
+
+async function authHeader() {
+  if (!supabaseClient) return {};
+  const {
+    data: { session }
+  } = await supabaseClient.auth.getSession();
+  return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+}
+
+async function analyzeImportedDocument(file, drawId) {
+  const draw = draws.find((item) => item.id === drawId);
+  if (!draw) return;
+  try {
+    const form = new FormData();
+    form.append("file", file);
+    const response = await fetch("/api/extract-draw", {
+      method: "POST",
+      headers: await authHeader(),
+      body: form
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(payload.error || "AI extraction is not available yet.");
+    }
+    applyExtraction(draw, payload.extraction || {});
+    draw.sourceFile.aiStatus = "Complete";
+    draw.sourceFile.aiMessage = `AI extracted ${Math.round((payload.extraction?.confidence || 0) * 100)}% confidence. Review before submission.`;
+    recordActivity("AI extracted document", draw.id, file.name);
+  } catch (error) {
+    draw.sourceFile.aiStatus = "Needs review";
+    draw.sourceFile.aiMessage = error.message || "AI extraction failed. The draft is still editable.";
+    recordActivity("AI extraction needs review", draw.id, draw.sourceFile.aiMessage);
+  }
+  saveData();
+  render();
+}
+
+function applyExtraction(draw, extraction) {
+  if (extraction.contractor) draw.contractor = extraction.contractor;
+  if (extraction.projectName) draw.project = extraction.projectName;
+  if (extraction.drawNumber) draw.period = `${extraction.documentType || "Imported document"} · ${extraction.drawNumber}`;
+  if (hasValue(extraction.requestedAmount)) draw.requested = extraction.requestedAmount;
+  if (hasValue(extraction.budgetLineTotal)) draw.approvedBudget = extraction.budgetLineTotal;
+  if (hasValue(extraction.completionPercent)) draw.completed = Math.min(100, Math.max(0, extraction.completionPercent));
+  if (extraction.inspectionStatus) draw.inspection = extraction.inspectionStatus;
+  if (hasValue(extraction.holdbackTotal)) draw.holdbackTotal = extraction.holdbackTotal;
+  if (hasValue(extraction.holdbackEligible)) draw.holdbackEligible = extraction.holdbackEligible;
+  if (extraction.summary) draw.update = extraction.summary;
+
+  const extractedRequirements = (extraction.requirements || [])
+    .filter((item) => item.label)
+    .map((item) => [item.label, Boolean(item.complete), item.note || "Review item"]);
+  if (extractedRequirements.length) draw.requirements = extractedRequirements;
+
+  const extractedLines = (extraction.budgetLines || [])
+    .filter((item) => item.label)
+    .map((item) => [item.label, Number(item.budget || 0), Number(item.requested || 0)]);
+  if (extractedLines.length) draw.lines = extractedLines;
+
+  const extractedPhotos = (extraction.photos || [])
+    .filter((item) => item.title)
+    .map((item) => [item.title, item.note || "Review photo support", "https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=800&q=80"]);
+  if (extractedPhotos.length) draw.photos = extractedPhotos;
+
+  const extractedFollowUps = (extraction.followUps || [])
+    .filter((item) => item.title)
+    .map((item) => [item.title, item.note || "Follow up before submission"]);
+  if (extractedFollowUps.length) draw.followUps = extractedFollowUps;
+
+  if (hasValue(extraction.submittedConstructionBudget)) project.submittedBudget = extraction.submittedConstructionBudget;
+  if (hasValue(extraction.approvedAmount)) project.approvedAmount = extraction.approvedAmount;
+  if (normalizeDate(extraction.approvedDate)) project.approvedDate = normalizeDate(extraction.approvedDate);
+  if (hasValue(extraction.remainingBudget)) project.remainingBudget = extraction.remainingBudget;
+  if (normalizeDate(extraction.expectedNextDrawDate)) project.nextDrawDate = normalizeDate(extraction.expectedNextDrawDate);
+
+  if (draw.lines[0]) {
+    if (!draw.approvedBudget) draw.approvedBudget = draw.lines.reduce((sum, line) => sum + Number(line[1] || 0), 0);
+    if (!draw.requested) draw.requested = draw.lines.reduce((sum, line) => sum + Number(line[2] || 0), 0);
+  }
+  updateDrawStatus(draw);
 }
 
 function renderMetrics(items) {
@@ -830,13 +926,20 @@ function renderEditableDrawForm(draw) {
           <p class="eyebrow">Editable draw record</p>
           <h3>Draw details</h3>
         </div>
-        ${draw.sourceFile ? `<span class="badge attention"><i data-lucide="upload"></i>${draw.sourceFile.type} imported</span>` : ""}
+        ${
+          draw.sourceFile
+            ? `<span class="badge ${draw.sourceFile.aiStatus === "Complete" ? "ready" : "attention"}"><i data-lucide="${
+                draw.sourceFile.aiStatus === "Complete" ? "sparkles" : "upload"
+              }"></i>${draw.sourceFile.aiStatus || `${draw.sourceFile.type} imported`}</span>`
+            : ""
+        }
       </div>
       ${
         draw.sourceFile
           ? `<div class="source-file">
               <strong>${escapeHtml(draw.sourceFile.name)}</strong>
               <span>${Math.max(1, Math.round(draw.sourceFile.size / 1024))} KB imported ${formatDate(draw.sourceFile.importedAt.slice(0, 10))}</span>
+              <span>${escapeHtml(draw.sourceFile.aiMessage || "Review the imported document and edit fields before submission.")}</span>
             </div>`
           : ""
       }
@@ -1176,7 +1279,7 @@ function bindEvents() {
   document.getElementById("importData").addEventListener("change", async (event) => {
     const [file] = event.target.files;
     if (!file) return;
-    if (!importDocument(file)) {
+    if (!(await importDocument(file))) {
       alert("Please import a PDF or DOCX file.");
     }
     event.target.value = "";

@@ -13,11 +13,17 @@
    - `SUPABASE_URL`
    - `SUPABASE_ANON_KEY`
    - `COMPANY_DOMAIN=pezonproperties.com`
+   - `OPENAI_API_KEY`
+   - Optional: `OPENAI_MODEL=gpt-5.6`
 7. Redeploy the hosted tracker.
 
 The anon key is safe to expose in browser apps when Row Level Security is enabled.
 The schema restricts shared tracker access to authenticated users whose email ends in `@pezonproperties.com`.
 New users create an account once, confirm their email, then sign in with email and password.
+
+AI document extraction runs through the Vercel server function at `/api/extract-draw`.
+The OpenAI key must stay in Vercel environment variables and should never be placed in `config.js` or browser code.
+If `OPENAI_API_KEY` is missing, PDF/DOCX imports still create editable draft draw records, but AI extraction will show a needs-review message.
 
 For v1, draw records are stored as one shared JSON state row plus a separate activity log table.
 That keeps the free version simple. Later, the same project can be migrated into fully relational tables for reporting.
