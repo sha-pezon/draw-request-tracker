@@ -37,6 +37,38 @@
       </form>
     </section>
 
+    <section class="profile-overlay" id="profileOverlay" aria-label="Profile">
+      <div class="profile-card">
+        <button class="ghost-button back-button" id="profileBack" type="button"><i data-lucide="arrow-left"></i><span>Back</span></button>
+        <div class="profile-head">
+          <div class="profile-avatar" id="profileAvatar">PP</div>
+          <div>
+            <p class="eyebrow">Pezon Properties account</p>
+            <h1 id="profileName">Signed in user</h1>
+            <p id="profileEmail">name@pezonproperties.com</p>
+          </div>
+        </div>
+        <div class="profile-grid">
+          <article>
+            <span>Access</span>
+            <strong id="profileAccess">Company workspace</strong>
+          </article>
+          <article>
+            <span>Last sign in</span>
+            <strong id="profileSignedIn">Current session</strong>
+          </article>
+          <article>
+            <span>Activity tracked</span>
+            <strong id="profileActivityCount">0 edits</strong>
+          </article>
+        </div>
+        <div class="profile-actions">
+          <button class="primary-button" id="profileSave" type="button"><i data-lucide="save"></i><span>Save tracker</span></button>
+          <button class="ghost-button" id="profileSignOut" type="button"><i data-lucide="log-out"></i><span>Sign out</span></button>
+        </div>
+      </div>
+    </section>
+
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
@@ -68,9 +100,9 @@
           </div>
           <div class="topbar-actions">
             <button class="ghost-button" id="accountButton"><i data-lucide="user"></i><span id="accountName">Sign in</span></button>
-            <button class="icon-button" title="Search"><i data-lucide="search"></i></button>
-            <button class="icon-button" id="exportData" title="Export tracker data"><i data-lucide="download"></i></button>
-            <button class="primary-button" id="newDraw"><i data-lucide="plus"></i><span>New draw</span></button>
+            <button class="icon-button" id="focusSearch" title="Search draw requests"><i data-lucide="search"></i></button>
+            <button class="icon-button" id="exportData" title="Download draw summary"><i data-lucide="file-text"></i></button>
+            <button class="primary-button" id="newDraw"><i data-lucide="plus"></i><span>New draft</span></button>
           </div>
         </header>
 

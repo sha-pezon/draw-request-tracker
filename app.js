@@ -243,6 +243,7 @@ ensureDemoProperty();
 if (!window.lucide) {
   const iconPaths = {
     "arrow-down-up": ["M12 3v18", "m8 7 4-4 4 4", "M4 17l4 4 4-4"],
+    "arrow-left": ["M19 12H5", "m12 19-7-7 7-7"],
     "bell-ring": ["M6 8a6 6 0 0 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9", "M10.3 21a2 2 0 0 0 3.4 0", "M4 2C2.8 3 2 4.5 2 6", "M22 6c0-1.5-.8-3-2-4"],
     "check": ["M20 6 9 17l-5-5"],
     "check-circle-2": ["M9 12l2 2 4-5", "M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"],
@@ -251,11 +252,13 @@ if (!window.lucide) {
     "copy": ["M8 8h11v11H8z", "M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"],
     "download": ["M12 3v12", "m7 10 5 5 5-5", "M5 21h14"],
     "file-check-2": ["M14 2v6h6", "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z", "M9 15l2 2 4-5"],
+    "file-text": ["M14 2v6h6", "M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z", "M8 13h8", "M8 17h6"],
     "flag": ["M5 22V4", "M5 4h11l-1.5 4L16 12H5"],
     "image": ["M4 5h16v14H4z", "m4 15 4-5 3 3 2-3 3 5", "M8 9h.01"],
     "layout-dashboard": ["M3 3h8v8H3z", "M13 3h8v5h-8z", "M13 10h8v11h-8z", "M3 13h8v8H3z"],
     "list-checks": ["M3 6l1.5 1.5L7 4", "M3 12l1.5 1.5L7 10", "M3 18l1.5 1.5L7 16", "M10 6h11", "M10 12h11", "M10 18h11"],
     "log-in": ["M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4", "M10 17l5-5-5-5", "M15 12H3"],
+    "log-out": ["M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4", "M16 17l5-5-5-5", "M21 12H9"],
     "mouse-pointer-click": ["M4 4l7 17 2-7 7-2z", "M14 4h6v6"],
     "octagon-alert": ["M8 2h8l6 6v8l-6 6H8l-6-6V8z", "M12 8v5", "M12 16h.01"],
     "plus": ["M12 5v14", "M5 12h14"],
@@ -414,6 +417,7 @@ function recordActivity(action, target, detail = "") {
 
 function renderAccount() {
   const overlay = document.getElementById("loginOverlay");
+  const profileOverlay = document.getElementById("profileOverlay");
   const label = document.getElementById("accountName");
   const loginCopy = document.querySelector(".login-card p:not(.eyebrow)");
   const loginTitle = document.querySelector(".login-card h1");
@@ -438,11 +442,32 @@ function renderAccount() {
   }
   if (!account) {
     overlay.classList.add("active");
+    profileOverlay.classList.remove("active");
     label.textContent = "Sign in";
     return;
   }
   overlay.classList.remove("active");
   label.textContent = account.name;
+  renderProfile();
+}
+
+function renderProfile() {
+  if (!account) return;
+  document.getElementById("profileAvatar").textContent = initials(account.name) || "PP";
+  document.getElementById("profileName").textContent = account.name;
+  document.getElementById("profileEmail").textContent = account.email;
+  document.getElementById("profileAccess").textContent = emailAllowed(account.email) ? "Pezon Properties workspace" : "Limited access";
+  document.getElementById("profileSignedIn").textContent = account.signedInAt
+    ? new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit"
+      }).format(new Date(account.signedInAt))
+    : "Current session";
+  const userEdits = activity.filter((item) => item.userEmail === account.email).length;
+  document.getElementById("profileActivityCount").textContent = `${userEdits} ${userEdits === 1 ? "edit" : "edits"}`;
 }
 
 function scheduleRemoteSave() {
@@ -1133,6 +1158,64 @@ function updateActiveDrawFromField(input) {
   render();
 }
 
+function downloadTextFile(filename, content, type = "text/plain") {
+  const blob = new Blob([content], { type });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+function buildDrawSummaryReport() {
+  const lines = [
+    "Pezon Construction Draw Tracker",
+    `Generated: ${formatDate(new Date().toISOString().slice(0, 10))}`,
+    "",
+    "Primary Project",
+    `Property: ${project.projectName}`,
+    `Submitted construction budget: ${moneyCents(project.submittedBudget)}`,
+    `Approved amount: ${moneyCents(project.approvedAmount)}`,
+    `Approved date: ${formatDate(project.approvedDate) || "Pending"}`,
+    `Remaining budget: ${moneyCents(project.remainingBudget)}`,
+    `Expected next draw request: ${project.nextDrawDate ? formatDate(project.nextDrawDate) : "Pending SOW"}`,
+    "",
+    "Draw Requests"
+  ];
+
+  draws.forEach((draw) => {
+    lines.push("");
+    lines.push(`${draw.id} - ${draw.contractor}`);
+    lines.push(`Property: ${draw.project}`);
+    lines.push(`Status: ${stateLabels[draw.status]} (${draw.readiness}% readiness)`);
+    lines.push(`Requested: ${moneyCents(draw.requested)}`);
+    lines.push(`Budget line total: ${moneyCents(draw.approvedBudget)}`);
+    lines.push(`Completion: ${draw.completed}%`);
+    lines.push(`Inspection: ${draw.inspection}`);
+    lines.push(`Holdback remaining: ${moneyCents(holdbackRemaining(draw))}`);
+    lines.push(`Update: ${draw.update}`);
+    lines.push("Missing / follow-up:");
+    const missingRequirements = draw.requirements.filter((item) => !item[1]);
+    const followUps = [...missingRequirements.map((item) => `${item[0]} - ${item[2]}`), ...draw.followUps.map((item) => `${item[0]} - ${item[1]}`)];
+    if (followUps.length) {
+      followUps.forEach((item) => lines.push(`- ${item}`));
+    } else {
+      lines.push("- None");
+    }
+  });
+
+  return lines.join("\n");
+}
+
+function showDrawsView() {
+  activeView = "draws";
+  document.querySelectorAll(".nav-item[data-view]").forEach((item) => {
+    item.classList.toggle("active", item.dataset.view === "draws");
+  });
+  render();
+  document.getElementById("drawsSection")?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
 function bindEvents() {
   document.querySelectorAll(".nav-item[data-view]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -1195,9 +1278,32 @@ function bindEvents() {
     }
   });
   document.getElementById("accountButton").addEventListener("click", () => {
+    if (account) {
+      renderProfile();
+      document.getElementById("profileOverlay").classList.add("active");
+      lucide.createIcons();
+      return;
+    }
     document.getElementById("loginOverlay").classList.add("active");
     document.getElementById("loginName").value = account?.name || "";
     document.getElementById("loginEmail").value = account?.email || "";
+  });
+  document.getElementById("profileBack").addEventListener("click", () => {
+    document.getElementById("profileOverlay").classList.remove("active");
+  });
+  document.getElementById("profileSave").addEventListener("click", () => {
+    updateProjectFromForm();
+    saveData();
+    recordActivity("Saved from profile", project.projectName);
+    flashButton("profileSave", "Saved");
+  });
+  document.getElementById("profileSignOut").addEventListener("click", async () => {
+    if (supabaseClient) await supabaseClient.auth.signOut();
+    account = null;
+    remoteReady = false;
+    localStorage.removeItem(accountKey);
+    document.getElementById("profileOverlay").classList.remove("active");
+    render();
   });
   document.getElementById("createAccount").addEventListener("click", async () => {
     const name = document.getElementById("loginName").value.trim();
@@ -1251,6 +1357,12 @@ function bindEvents() {
       ? resetError.message
       : "Check your email for the password reset link.";
   });
+  document.getElementById("focusSearch").addEventListener("click", () => {
+    document.getElementById("dashboardSection")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const search = document.getElementById("searchInput");
+    search.focus();
+    search.select();
+  });
   document.getElementById("searchInput").addEventListener("input", render);
   document.getElementById("projectForm").addEventListener("input", () => {
     updateProjectFromForm();
@@ -1267,14 +1379,8 @@ function bindEvents() {
   document.getElementById("exportData").addEventListener("click", () => {
     updateProjectFromForm();
     saveData();
-    recordActivity("Exported data", "Tracker JSON");
-    const payload = JSON.stringify({ project, draws, activity, exportedAt: new Date().toISOString() }, null, 2);
-    const blob = new Blob([payload], { type: "application/json" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `drawops-tracker-${new Date().toISOString().slice(0, 10)}.json`;
-    link.click();
-    URL.revokeObjectURL(link.href);
+    recordActivity("Downloaded report", "Draw summary");
+    downloadTextFile(`pezon-draw-summary-${new Date().toISOString().slice(0, 10)}.txt`, buildDrawSummaryReport());
   });
   document.getElementById("importData").addEventListener("change", async (event) => {
     const [file] = event.target.files;
@@ -1318,7 +1424,11 @@ function bindEvents() {
     draws.unshift(draw);
     activeId = draw.id;
     recordActivity("Created draw", draw.id, draw.contractor);
-    render();
+    document.getElementById("searchInput").value = "";
+    showDrawsView();
+    setTimeout(() => {
+      document.querySelector("[data-draw-field='contractor']")?.focus();
+    }, 200);
   });
   document.querySelectorAll(".segment").forEach((button) => {
     button.addEventListener("click", () => {
