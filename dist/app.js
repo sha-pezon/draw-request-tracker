@@ -800,6 +800,36 @@ async function analyzeImportedDocument(file, drawId) {
   render();
 }
 
+async function attachPhotoEvidence(file) {
+  if (fileKind(file) !== "Photo") {
+    alert("Please upload an image file for photo evidence.");
+    return;
+  }
+  const draw = draws.find((item) => item.id === activeId);
+  if (!draw) return;
+  const imagePreview = await readImagePreview(file);
+  draw.photos.unshift(["Uploaded photo evidence", file.name, imagePreview || "https://images.unsplash.com/photo-1503387762-592deb58ef4e?auto=format&fit=crop&w=800&q=80"]);
+  const progressPhoto = draw.requirements.find((item) => item[0].toLowerCase().includes("progress photos"));
+  if (progressPhoto) {
+    progressPhoto[1] = true;
+    progressPhoto[2] = `Photo evidence uploaded: ${file.name}`;
+  }
+  draw.sourceFile = {
+    name: file.name,
+    type: "Photo",
+    size: file.size,
+    importedAt: new Date().toISOString(),
+    previewUrl: imagePreview,
+    aiStatus: "Analyzing",
+    aiMessage: "AI is reading this photo and checking what it proves for the draw package."
+  };
+  updateDrawStatus(draw);
+  recordActivity("Uploaded photo evidence", draw.id, file.name);
+  saveData();
+  render();
+  analyzeImportedDocument(file, draw.id);
+}
+
 function applyExtraction(draw, extraction) {
   if (extraction.contractor) draw.contractor = extraction.contractor;
   if (extraction.projectName) draw.project = extraction.projectName;
@@ -1122,7 +1152,13 @@ function renderBudget(draw, overBudget) {
 function renderPhotos(draw) {
   return `
     <section class="section-box">
-      <h3>Photo evidence</h3>
+      <div class="section-title-row">
+        <h3>Photo evidence</h3>
+        <label class="mini-upload-button">
+          <i data-lucide="image"></i><span>Add photo</span>
+          <input class="photoEvidenceInput" type="file" accept=".jpg,.jpeg,.png,.webp,.heic,.heif,image/jpeg,image/png,image/webp,image/heic,image/heif" />
+        </label>
+      </div>
       <div class="photo-grid">
         ${draw.photos
           .map(
@@ -1303,6 +1339,11 @@ function bindEvents() {
   document.getElementById("detailPanel").addEventListener("change", (event) => {
     if (event.target.matches("[data-draw-field]")) {
       updateActiveDrawFromField(event.target);
+    }
+    if (event.target.matches(".photoEvidenceInput")) {
+      const [file] = event.target.files;
+      if (file) attachPhotoEvidence(file);
+      event.target.value = "";
     }
   });
   document.getElementById("accountButton").addEventListener("click", () => {
